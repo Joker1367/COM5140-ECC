@@ -1,19 +1,21 @@
 #include <iostream>
 #include <stdlib.h>
+#include <iomanip>
 #include <vector>
+#include <math.h>
 #include <string.h>
 
 using namespace std;
 
 #define MAX_Bit 1000
-#define n 63
-#define k 42
-#define r 21
+int n;
+int k;
+int r;
 
 // GF(64) with a is a primitive element satisfying a^6 + a + 1
 
 // pow_table[i] = a ^ i
-vector<int> pow_table = {1, 2, 4, 8, 16, 32, 3, 6, 
+/*vector<int> pow_table = {1, 2, 4, 8, 16, 32, 3, 6, 
                         12, 24, 48, 35, 5, 10, 20, 40, 
                         19, 38, 15, 30, 60, 59, 53, 41, 
                         17, 34, 7, 14, 28, 56, 51, 37, 
@@ -31,33 +33,69 @@ vector<int> log_table = {-1, 0, 1, 6, 2, 12, 7, 26,
                         34, 31, 17, 47, 15, 23, 53, 
                         51, 37, 44, 55, 40, 10, 61, 
                         46, 30, 50, 22, 39, 43, 29, 
-                        60, 42, 21, 20, 59, 57, 58};
+                        60, 42, 21, 20, 59, 57, 58};*/
 
 // coefficient of generator polynomial
-vector<int> generator_coeff = {58, 62, 59, 7, 35, 58, 63, 47, 51, 6, 33, 
-                               43, 44, 27, 7, 53, 39, 62, 52, 41, 44, 1};
+/*vector<int> generator_coeff = {58, 62, 59, 7, 35, 58, 63, 47, 51, 6, 33, 
+                               43, 44, 27, 7, 53, 39, 62, 52, 41, 44, 1};*/
 
-// Addition in GF(64)
-int GF64_add(int a, int b){
+vector<int> pow_table;
+vector<int> log_table;
+vector<int> generator_coeff;
+
+void Initialize(int n, int k, int r, int primitive_poly) {
+
+    pow_table.assign(n, 0);
+    log_table.assign(n + 1, 0);
+    generator_coeff.assign(r + 1, 0);
+
+    log_table[0] = -1;
+
+    pow_table[0] = 1;
+    log_table[1] = 0;
+    for(int i = 1; i < n; i++) {
+        pow_table[i] = pow_table[i - 1] << 1;
+        if(pow_table[i] & (n + 1)) {
+            pow_table[i] ^= primitive_poly;
+        }
+        log_table[pow_table[i]] = i;
+    }
+
+    generator_coeff[0] = 1;
+    for(int i = 1; i <= r; i++) {
+        for(int j = i; j >= 1; j--) {
+            if(generator_coeff[j] == 0) {
+                generator_coeff[j] = generator_coeff[j - 1];
+            }
+            else {
+                generator_coeff[j] = generator_coeff[j - 1] ^ pow_table[(log_table[generator_coeff[j]] + i) % n];
+            }
+        }
+        generator_coeff[0] = pow_table[(log_table[generator_coeff[0]] + i) % n];
+    }
+}
+
+// Addition in GF(n+1)
+int GF_add(int a, int b){
     return a ^ b;
 }
 
-// multiplication in GF(64)
-int GF64_mul(int a, int b){
+// multiplication in GF(n+1)
+int GF_mul(int a, int b){
     if(a == 0 || b == 0) return 0;
     else{
-        return pow_table[(log_table[a] + log_table[b]) % 63];
+        return pow_table[(log_table[a] + log_table[b]) % n];
     }
 }
 
 // Division in GF(64)
-int GF64_div(int a, int b){
+int GF_div(int a, int b){
     if(a == 0) return 0;
     else if(b == 0) {
         cout << "Divide by zero!!" << endl;
         return -1;
     }
-    else return pow_table[(log_table[a] - log_table[b] + 63) % 63];
+    else return pow_table[(log_table[a] - log_table[b] + n) % n];
 }
 
 // Polynomial in GF64 : representing P(x) = P0 + P1 * x + P2 * x^2 ..... Pn * x^n
@@ -106,7 +144,7 @@ Polynomial Polynomial::operator+(Polynomial y){                             // r
     int x_len = this->degree;
     int y_len = y.degree;
     for(degree = 0; degree <= x_len || degree <= y_len; degree++){
-        res.data[degree] = GF64_add(this->data[degree], y.data[degree]);    // res[i] = A[i] + B[i]    
+        res.data[degree] = GF_add(this->data[degree], y.data[degree]);    // res[i] = A[i] + B[i]    
     }
     while(degree >= 1 && res.data[degree] == 0) {                           // check prefix zero and update degree
         degree--;
@@ -122,7 +160,7 @@ Polynomial Polynomial::operator*(Polynomial y){                             // r
     int degree = x_len + y_len;
     for(int i = 0; i <= y_len; i++){                                        // res[i] = sum(A[j] * B[i - j])
         for(int j = 0; j <= x_len; j++) {
-            res.data[i + j] = GF64_add(res.data[i + j], GF64_mul(this->data[j], y.data[i]));
+            res.data[i + j] = GF_add(res.data[i + j], GF_mul(this->data[j], y.data[i]));
         }
     }
     while(degree >= 1 && res.data[degree] == 0) {                           // check prefix zero and update degree
@@ -144,7 +182,7 @@ Polynomial Polynomial::operator/(Polynomial y){                             // A
     }
     while(true){
         if(t.degree == y.degree){
-            res.data[0] = GF64_div(t.data[t.degree], y.data[y.degree]);
+            res.data[0] = GF_div(t.data[t.degree], y.data[y.degree]);
             t = t + y * res.data[0];
         }
         if(i <= this->degree){
@@ -171,7 +209,7 @@ Polynomial Polynomial::operator%(Polynomial y){                             // A
     }
     while(true){
         if(t.degree == y.degree){
-            res.data[0] = GF64_div(t.data[t.degree], y.data[y.degree]);
+            res.data[0] = GF_div(t.data[t.degree], y.data[y.degree]);
             t = t + y * res.data[0];
         }
         if(i <= this->degree){
@@ -203,13 +241,13 @@ int Polynomial::get_value(int alpha){                                       // C
     int pow = alpha;
     int res = data[degree];                                                 // Horner's rule
     for(int i = degree - 1; i >= 0; i--){                                   
-        res = GF64_add(data[i], GF64_mul(res, pow));
+        res = GF_add(data[i], GF_mul(res, pow));
     }
     return res;
 }
 
 void Polynomial::Print(){
-    for(int i = 0; i <= degree; i++) cout << data[i] << " ";
+    for(int i = 0; i <= degree; i++) cout << setw(2) << setfill(' ') << data[i] << " ";
     cout << endl;
 }
 

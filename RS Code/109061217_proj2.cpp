@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <string.h>
+#include <iomanip>
 #include <fstream>
 #include <time.h>
 #include "Polynomial.h"
@@ -13,11 +14,31 @@ using namespace std;
 void EEA(Polynomial P, Polynomial Q, Polynomial& s0, Polynomial& s1, Polynomial& t0, Polynomial& t1, Polynomial& W, int e0);
 
 int main(void){
+
+// Initialize
+    n = 31;
+    k = 15;
+    r = 16;
+    Initialize(n, k, r, 0b100101);
+
+    for(int x: pow_table) {
+        cout << x << " ";
+    }
+    cout << endl;
+    for(int x: log_table) {
+        cout << x << " ";
+    }
+    cout << endl;
+    for(int x: generator_coeff) {
+        cout << x << " ";
+    }
+    cout << endl;
+
     int x;
     int e0, e1;
     int count;
     bool failure = false;
-    ifstream inFile;
+    ifstream inFile, golden;
     ofstream outFile;
     Polynomial generator(generator_coeff);          // generator polynomial g(x)
     Polynomial information;                         // Information bits I(x)
@@ -32,8 +53,6 @@ int main(void){
     Polynomial W;                                   // error evaluator polynomial omega(x)
     Polynomial xr;                                  // x^r
 
-// Encoding
-    // Initilization
     information.degree = k - 1;
     Answer.degree = n - 1;
     codeword.degree = n - 1;
@@ -44,6 +63,7 @@ int main(void){
     tmp.degree = 1;
     srand(time(NULL));
 
+// Encoding
     // Generate testcase
     outFile.open("testcase.txt");
     for(int testcase = 0; testcase < 100; testcase++){
@@ -62,8 +82,10 @@ int main(void){
     outFile.close();
 
 // Decoding
-    inFile.open("testcase.txt");
+    inFile.open("./test_31/test6.txt");
+    golden.open("./test_31/ans6.txt");
     string s;
+    bool fail = false;
     for(int testcase = 0; testcase < 10; testcase++){
         // Initialization
         e0 = 0; e1 = 0;                                                             
@@ -84,10 +106,22 @@ int main(void){
             xr.data[i] = 0;
         }
         xr.data[r] = 1;
-        for(int i = 0; i <= n - 1; i++) inFile >> Answer.data[i]; Answer.Print();
+
+
+        fail = false;
+        for(int i = 0; i <= n - 1; i++) { 
+            golden >> s; 
+            if(s == "Fail") {
+                fail = true;
+                break;
+            }
+            else Answer.data[i] = stoi(s);
+        }
+
+        cout << "Received word: ";
         for(int i = 0; i <= n - 1; i++){                                            // Compute R'(x) and sigma0(x)
             inFile >> s;
-            cout << s << " ";
+            cout << setw(2) << setfill(' ') << s << " ";
             if(s == "*") {
                 tmp.data[0] = 1; tmp.data[1] = pow_table[i];                        
                 I0 = I0 * tmp;
@@ -103,10 +137,13 @@ int main(void){
         cout << "e0 = " << e0 << "; e1 = " << e1 << endl;
         if(e0 > r) {
             cout << "failure" << endl;
+            if(!fail) cout << "ERROR !!!" << endl;
+            system("pause");
             continue;
         }
         received_vector = codeword;                                                 
         received_vector = received_vector % generator;                              // modulo g(x) for faster calculation of R(alpha^i)
+        cout << "yess\n";
         
         // Compute Syndrome
         for(int i = 0; i <= r - 1; i++) {                                           // Sj = R(alpha^j)
@@ -122,34 +159,44 @@ int main(void){
 
         // Time Domain Approach
         failure = false;                                                            // boolean variable for decode failure or not
-        if(I0.data[0] == 0 || W.degree >= e0 + t1.degree) failure = true;
+        if(I0.data[0] == 0 || W.degree >= e0 + t1.degree) {
+            failure = true;
+        }
         else{
             count = 0;
             for(int i = 0; i <= n - 1; i++){
-                x = GF64_div(1, pow_table[i]);
+                x = GF_div(1, pow_table[i]);
                 if(I0.get_value(x) == 0 && I1.get_value(x) != 0){
                     count++;
-                    error.data[i] = GF64_div(W.get_value(x), I1.get_value(x));      // Ei = -omega(alpha ^ -i) / sigma'(alpha ^ -i)
+                    error.data[i] = GF_div(W.get_value(x), I1.get_value(x));      // Ei = -omega(alpha ^ -i) / sigma'(alpha ^ -i)
                 }
                 else error.data[i] = 0;
             }
             if(count != I0.degree) failure = true;
         }
-        if(failure) cout << "failure!" << endl;
+
+        if(failure) {
+            if(!fail) cout << "ERROR !!!" << endl;
+            cout << "failure!" << endl;
+        }
         else{                                                                       
             codeword = codeword + error;                                            // C(x) = R(x) - E(x)
             for(int i = 0; i <= n - 1; i++){                                        // Compare C(x) with A(x)
                 if(codeword.data[i] != Answer.data[i]){
-                    codeword.Print();
-                    Answer.Print();
+                    cout << "Decode Result: "; codeword.Print();
+                    cout << "Golden Result: "; Answer.Print();
+                    cout << "ERROR !!!" << endl;
                     system("pause");
                 }
             }
+            cout << "Decode Result: "; codeword.Print();
             cout << "Testcase " << testcase << " pass!" << endl;
         }
+
         system("pause");
     }
     inFile.close();
+    golden.close();
     return 0;
 }
 
